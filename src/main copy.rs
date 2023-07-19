@@ -72,7 +72,7 @@ fn third_attempt(mut dirs: Vec<File>) -> Vec<File> {
     println!("Files: {:#?}", dir_files);
 
     for dir in dirs {
-        for file in dir.value().parse() {
+        for file in dir.value() {
 
         }
     }
