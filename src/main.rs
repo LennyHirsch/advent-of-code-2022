@@ -4,8 +4,21 @@ use std::ops::Not;
 fn main() {
     let contents = fs::read_to_string("day7.txt").expect("Error reading file");
     let parsed = parse_lines(contents);
-    let files = build_filesystem(parsed);
-    println!("{:#?}", files);
+    let entries = build_filesystem(parsed);
+    
+    for entry in entries.iter() {
+        // let clone = entries.clone();
+        // let clone_entry = entry.clone();
+        match entry {
+            File::Dir { name, files } => {
+                let current = entry.clone();
+                let test = build_directory(current, entries.clone());
+            }
+            File::Plain { name, size } => {
+                continue;
+            }
+        }
+    }
 
 }
 
@@ -25,6 +38,41 @@ enum Command {
 enum Entry {
     Command(Command),
     File(File),
+}
+
+fn build_directory(root: File, entries: Vec<File>) -> Vec<File> {
+    println!("Reading through directory");
+    if let File::Dir { name, files } = root {
+        let mut temp_files = Vec::new();
+        let mut file_iter = files.iter();
+        
+    }
+    
+    
+
+    loop {
+        match iterator.next() {
+            Some(item) => {
+                match item {
+                    File::Dir{ name, files } => {
+                        let current = item.clone();
+                        temp_files.push(current);
+                    },
+                    File::Plain { name, size } => {
+                        let current = item.clone();
+                        temp_files.push(current);
+                    }
+                }
+            },
+            None => {
+                for file in temp_files {
+                    root.push(file);
+                }
+                break;
+            }
+        }
+    }
+    entries
 }
 
 fn build_filesystem(entries: Vec<Entry>) -> Vec<File> { //works partially. Need to redo using a HashMap instead of a vector I think...
@@ -52,7 +100,7 @@ fn build_filesystem(entries: Vec<Entry>) -> Vec<File> { //works partially. Need 
                         }
                     },
                     Entry::Command(Ls) => {
-                        println!("Reading contents of {:?}", cwd.last().unwrap());
+                        
                     }
                     Entry::File(file) => {
                         temp_files.push(file.clone());
