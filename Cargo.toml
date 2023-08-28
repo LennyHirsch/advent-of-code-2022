@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 either = "1.9.0"
+random-string = "1.0.0"

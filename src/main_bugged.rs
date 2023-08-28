@@ -1,37 +1,44 @@
 use std::fs;
 use random_string::generate;
 
+// THIS ALL WORKS FOR THE EXAMPLE PROVIDED, BUT GIVES THE WRONG ANSWER FOR THE PROPER DATASET...
+// NOT SURE WHY. APPARENTLY THE CORRECT ANSWER IS HIGHER THAN THE ONE GIVEN BY THIS SCRIPT.
+
 const MAX_SIZE: usize = 100000;
-const CHAR_SET: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
-const STRING_LEN: usize = 12;
+const CHAR_SET: &str = "abcdefghijklmnopqrstuvwxyz";
+const STRING_LEN: usize = 10;
 
 fn main() {
     let contents = fs::read_to_string("day7.txt").expect("Reading file contents");
-    let (entries, mut dirlist) = parse_lines(contents);
-    let filelist = build_filelist(entries);
+    let entries = parse_lines(contents);
+
+    let (mut dirlist, filelist) = build_filelist(entries);
+
+    for dir in &dirlist {
+        println!("{:?}", dir);
+    }
+
+    println!("FILES");
+
+    for file in &filelist {
+        println!("{:?}", file);
+    }
+
+    build_all_dirs(&mut dirlist, filelist.clone()); // initial build: inserts files
+    let dirlist_clone = dirlist.clone(); // second build: inserts subdirs
+    build_all_dirs(&mut dirlist, dirlist_clone);
     
-    let mut root = dirlist[0].clone();
-    dirlist.remove(0); // remove root from dirlist
-    
-    build_all_dirs(&mut dirlist, &filelist); // initial build: inserts files
-    let dirlist_clone = dirlist.clone();
-    build_all_dirs(&mut dirlist, &dirlist_clone); // second build: inserts subdirs
-    
+    let mut root = File::Dir { name: "/".to_string(), id: "aaa".to_string(), size: 0, files: Vec::new(), parent: None };
     build_root(&mut root, filelist.clone());
     build_root(&mut root, dirlist.clone());
 
+    let root_subdirs = get_root_subdirs(root.clone()).unwrap();
 
-    for dir in &dirlist {
-        println!("{}: {}", dir.get_name(), dir.get_size());
-    }
+    println!("{:#?}", root);
 
     let filtered = filter_by_size(dirlist, MAX_SIZE);
-
-    let mut size_sum: usize = filtered.into_iter().map(|dir| dir.get_size()).sum();
-    let root_size = root.get_size();
-    if root_size <= MAX_SIZE {
-        size_sum = size_sum + root_size;
-    }
+    // println!("{:#?}", &filtered);
+    let size_sum: usize = filtered.into_iter().map(|dir| dir.get_size()).sum();
     println!("{}", size_sum);
 }
 
@@ -52,6 +59,7 @@ enum File {
 }
 
 impl File {
+    /// Helper function to get the name of the file, as a clone.
     fn get_name(&self) -> String {
         match self {
             File::Plain { name, .. } | File::Dir { name, .. } => {
@@ -154,9 +162,8 @@ enum Entry {
 /// If it is a file, what type of file is it, what is its name, its size, and if it's a directory, what are its contents.
 /// 
 /// Currently the contents of a directory are kept empty. These should be populated with the return values of the ls command.
-fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
+fn parse_lines(contents: String) -> Vec<Entry> {
     let mut entries: Vec<Entry> = Vec::new();
-    let mut dirs: Vec<File> = Vec::new();
     let mut cwd: Vec<String> = Vec::new();
     let mut cid: Vec<String> = Vec::new();
 
@@ -175,26 +182,10 @@ fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
                                     cwd.pop();
                                     cid.pop();
                                 } else {
-                                    let id = generate(STRING_LEN, CHAR_SET); // generate unique identifier for this dir
+                                    let id = generate(STRING_LEN, CHAR_SET);
                                     cwd.push(target.to_string());
+                                    cid.push(id);
                                     entries.push(Entry::Command(Command::Cd { target: target.to_string() }));
-
-                                    let mut parent = None;
-                                    match cid.last() { // check if there is a parent id. If not, we're in the root.
-                                        Some(id) => {
-                                            parent = Some(id.clone());
-                                        },
-                                        None => {}
-                                    }
-                                    dirs.push(File::Dir { // push a new dir
-                                        name: target.to_string(),
-                                        size: 0,
-                                        files: Vec::new(),
-                                        parent,
-                                        id: id.clone(),
-                                    });
-
-                                    cid.push(id); // push id last. This ensures root gets None as parent.
                                 }
                             },
                             "ls" => {
@@ -217,20 +208,21 @@ fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
             None => println!("Finished parsing line."),
         }
     }
-    (entries, dirs)
+    entries
 }
 
 /// Input argument: Vector of Entries.
 /// Separates entries into directories and plain files. Ignores commands - these are only needed for building the entry list in the first place.
 /// Returns: Tuple: (Vector of directories, Vector of plain files)
-fn build_filelist(entries: Vec<Entry>) -> Vec<File> {
+fn build_filelist(entries: Vec<Entry>) -> (Vec<File>, Vec<File>) {
+    let mut dirlist = Vec::new();
     let mut filelist = Vec::new();
 
     for entry in entries {
         match entry {
             Entry::File(file) => {
                 match &file {
-                    File::Dir { .. } => {},
+                    File::Dir { .. } => {dirlist.push(file)},
                     File::Plain { .. } => {filelist.push(file)},
                 }
             },
@@ -238,7 +230,7 @@ fn build_filelist(entries: Vec<Entry>) -> Vec<File> {
         }
     }
 
-    filelist
+    (dirlist, filelist)
 }
 
 /// Input argument: list of all files
@@ -247,7 +239,7 @@ fn build_filelist(entries: Vec<Entry>) -> Vec<File> {
 /// Also calculates size of root dir according to size of children.
 /// Returns: Root directory
 fn build_root(root: &mut File, filelist: Vec<File>) {
-    let files = filelist.into_iter().filter(|file| file.parent_eq(root.get_id().clone())).collect::<Vec<File>>();
+    let files = filelist.into_iter().filter(|file| file.parent_eq("/".to_string())).collect::<Vec<File>>();
     root.set_files(files);
     let size = root.get_size();
     root.set_size(size);
@@ -258,9 +250,8 @@ fn build_root(root: &mut File, filelist: Vec<File>) {
 /// Modifies the current directory's files, setting them to the aforementioned filtered vector.
 /// Also calculates size of directory according to size of children.
 /// No return; mutates the original directory.
-fn build_dir(dir: &mut File, filelist: &Vec<File>) {
-    let filelist_clone = filelist.clone();
-    let files = filelist_clone.into_iter().filter(|file| file.parent_eq(dir.get_id().clone())).collect::<Vec<File>>();
+fn build_dir(dir: &mut File, filelist: Vec<File>) {
+    let files = filelist.into_iter().filter(|file| file.parent_eq(dir.get_name().clone())).collect::<Vec<File>>();
     dir.set_files(files);
     let size = dir.get_size();
     dir.set_size(size);
@@ -269,9 +260,18 @@ fn build_dir(dir: &mut File, filelist: &Vec<File>) {
 /// Input arguments: mutale reference to a full list of all subdirectories of root, list of all files (can be plain files or directories)
 /// Recursively calls build_dir() to populate directories with their children.
 /// To populate directories with plain files and subdirectories, call twice: once with filelist, and a second time with a clone of the dirlist
-fn build_all_dirs(dirlist: &mut Vec<File>, filelist: &Vec<File>) {
+fn build_all_dirs(dirlist: &mut Vec<File>, filelist: Vec<File>) {
     for mut dir in dirlist {
-        build_dir(&mut dir, filelist);
+        build_dir(&mut dir, filelist.clone());
+    }
+}
+
+/// Input argument: root directory
+/// Returns: Vector of root's subdirectories
+fn get_root_subdirs(root: File) -> Option<Vec<File>> {
+    match root {
+        File::Dir { files, ..} => Some(files),
+        File::Plain { .. } => None,
     }
 }
 
@@ -279,6 +279,6 @@ fn build_all_dirs(dirlist: &mut Vec<File>, filelist: &Vec<File>) {
 /// Filters vector of directories by a certain maximum size
 /// Returns: filtered list of directories that are at most the maximum size
 fn filter_by_size(dirlist: Vec<File>, max_size: usize) -> Vec<File> {
-    let filtered = dirlist.into_iter().filter(|dir| dir.get_size() < max_size).collect();
+    let filtered = dirlist.into_iter().filter(|dir| dir.get_size() <= max_size).collect();
     filtered
 }
