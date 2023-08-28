@@ -41,40 +41,70 @@ impl Directory {
     }
 }
 
-fn build_filesystem(contents: String) -> Directory {
-    let mut root = Directory::new("/");
+// fn build_directory(root: File, entries: Vec<File>) -> Vec<File> {
+//     println!("Reading through directory");
+//     if let File::Dir { name, files } = root {
+//         let mut temp_files = Vec::new();
+//         let mut file_iter = files.iter();
+        
+//     }
+    
+    
 
-    let mut cwd = &mut root;
-    let mut hierarchy = Vec::new();
-    hierarchy.push(cwd.name.clone());
+//     loop {
+//         match iterator.next() {
+//             Some(item) => {
+//                 match item {
+//                     File::Dir{ name, files } => {
+//                         let current = item.clone();
+//                         temp_files.push(current);
+//                     },
+//                     File::Plain { name, size } => {
+//                         let current = item.clone();
+//                         temp_files.push(current);
+//                     }
+//                 }
+//             },
+//             None => {
+//                 for file in temp_files {
+//                     root.push(file);
+//                 }
+//                 break;
+//             }
+//         }
+//     }
+//     entries
+// }
 
-    let mut lines = contents.lines().peekable(); //.peekable() allows us to peek at the next value without consuming. This might help with parse_ls() skipping lines due to consumption when checking for break.
-    lines.next(); // skip "$ cd /": we're already in root
+fn build_filesystem(entries: Vec<Entry>) -> Vec<File> { //works partially. Need to redo using a HashMap instead of a vector I think...
+    let mut root = Vec::new();
+    let mut cwd: Vec<String> = Vec::new();
+    let mut temp_files = Vec::new();
+    let mut iterator = entries.iter();
+    loop {
+        match iterator.next() {
+            Some(item) => {
+                match item {
+                    Entry::Command(Command::Cd { target }) => {
+                        if temp_files.is_empty().not() {
+                            let current_dir = cwd.last().unwrap().clone();
+                            let dir = File::Dir{ name: current_dir, files: temp_files.clone() };
+                            root.push(dir);
 
-    println!("STARTING");
-    while let Some(line) = lines.next() {
-        println!("{:?}", line);
-        if line.starts_with("$ cd") {
-            if line.ends_with("/").not() && line.ends_with("..").not() {
-                let dir = line.split_whitespace().last().unwrap_or("/");
-                cwd = cwd.add_directory(dir);
-                hierarchy.push(dir.to_string()); //should allow us to handle $ cd .. by popping from hierarchy.
-                println!("{:?}", hierarchy);
-            } else if line.ends_with("..") {
-                hierarchy.pop();
-                cwd = super_dir(hierarchy, *root); //FIX: this causes an error on line 13 of the example input. Need to go UP to superdirectory, not add another subdirectory!
-                println!("{:?}", hierarchy);
-            }
-        } else if line.starts_with("$ ls") {
-            let mut ls_output = String::new();
-            while let Some(line) = lines.peek() { //first we peek...
-                if line.starts_with("$") { //... and check for a break...
-                    break;
-                } else {
-                    if let Some(line) = lines.next() { //... then we consume
-                        println!("{}", line);
-                    ls_output.push_str(line);
-                    ls_output.push('\n');
+                            temp_files.clear();
+
+                            if target == ".." { cwd.pop(); } //if we're moving up
+                            else { cwd.push(target.clone()); }
+
+                        } else { //this should only trigger for the very first loop: the root
+                            cwd.push(target.clone());
+                        }
+                    },
+                    Entry::Command(Ls) => {
+                        
+                    }
+                    Entry::File(file) => {
+                        temp_files.push(file.clone());
                     }
                 }
             }
@@ -99,13 +129,7 @@ fn parse_ls(cwd: &mut Directory, input: String) {
     }
 }
 
-fn super_dir(mut hierarchy: Vec<String>, mut root: Directory) -> Directory {
-    hierarchy.remove(0);
-    let mut cwd = &mut root;
-    let index = 0;
-    while index <= hierarchy.len() {
-        let super_dir = cwd.sub_directories.get_mut(&(hierarchy[index])).unwrap();
-        cwd = super_dir;
+        }
     }
     root
 }
