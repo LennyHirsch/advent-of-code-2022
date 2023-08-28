@@ -9,6 +9,14 @@ fn main() {
     let contents = fs::read_to_string("day7.txt").expect("Reading file contents");
     let (entries, mut dirlist) = parse_lines(contents);
     let filelist = build_filelist(entries);
+
+    for dir in &dirlist {
+        println!("{:?}", dir);
+    }
+
+    for file in &filelist {
+        println!("{:?}", file);
+    }
     
     let mut root = dirlist[0].clone();
     dirlist.remove(0); // remove root from dirlist
@@ -16,14 +24,19 @@ fn main() {
     build_all_dirs(&mut dirlist, &filelist); // initial build: inserts files
     let dirlist_clone = dirlist.clone();
     build_all_dirs(&mut dirlist, &dirlist_clone); // second build: inserts subdirs
+    for dir in &dirlist {
+        println!("{:#?}", dir);
+    }
     
     build_root(&mut root, filelist.clone());
     build_root(&mut root, dirlist.clone());
 
 
     for dir in &dirlist {
-        println!("{}: {}", dir.get_name(), dir.get_size());
+        println!("{} ({}): {}", dir.get_name(), dir.get_id(), dir.get_size());
     }
+
+    println!("{:#?}", &root);
 
     let filtered = filter_by_size(dirlist, MAX_SIZE);
 
@@ -40,14 +53,14 @@ enum File {
     Plain{
         name: String,
         size: usize,
-        parent: Option<String>
+        parent: Option<usize>
     },
     Dir{
         name: String,
+        id: usize,
+        parent: Option<usize>,
         size: usize,
         files: Vec<File>,
-        parent: Option<String>,
-        id: String,
     },
 }
 
@@ -60,14 +73,14 @@ impl File {
         }
     }
 
-    fn get_id(&self) -> String {
+    fn get_id(&self) -> usize {
         match self {
-            File::Plain {..} => return "0".to_string(),
+            File::Plain {..} => return 0,
             File::Dir {id, ..} => return id.clone(),
         }
     }
 
-    fn set_id(&mut self, identifier: String) {
+    fn set_id(&mut self, identifier: usize) {
         match self {
             File::Plain { .. } => return (),
             File::Dir {id, ..} => {
@@ -115,7 +128,7 @@ impl File {
     /// Checks if the file has a parent given by the query.
     /// Returns: true if the file's parent matches the query. false if file's parent does not match, or if file does not have a parent.
     /// The only case in which a file will not have a parent is if the file is the root.
-    fn parent_eq(&self, query: String) -> bool {
+    fn parent_eq(&self, query: usize) -> bool {
         match self {
             File::Plain { name: _, size: _, parent } | File::Dir {  parent, .. } => {
                 match parent {
@@ -155,10 +168,10 @@ enum Entry {
 /// 
 /// Currently the contents of a directory are kept empty. These should be populated with the return values of the ls command.
 fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
+    let mut id: usize = 0;
     let mut entries: Vec<Entry> = Vec::new();
     let mut dirs: Vec<File> = Vec::new();
-    let mut cwd: Vec<String> = Vec::new();
-    let mut cid: Vec<String> = Vec::new();
+    let mut cid: Vec<usize> = Vec::new();
 
     for line in contents.lines() {
         let mut line_split = line.split_whitespace();
@@ -172,11 +185,8 @@ fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
                             "cd" => {
                                 let target = line_split.next().unwrap();
                                 if target == ".." { // moving up a directory
-                                    cwd.pop();
                                     cid.pop();
                                 } else {
-                                    let id = generate(STRING_LEN, CHAR_SET); // generate unique identifier for this dir
-                                    cwd.push(target.to_string());
                                     entries.push(Entry::Command(Command::Cd { target: target.to_string() }));
 
                                     let mut parent = None;
@@ -195,6 +205,7 @@ fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
                                     });
 
                                     cid.push(id); // push id last. This ensures root gets None as parent.
+                                    id += 1; // increment id for next loop
                                 }
                             },
                             "ls" => {
@@ -203,9 +214,9 @@ fn parse_lines(contents: String) -> (Vec<Entry>, Vec<File>) {
                             _ => println!("Unknown command: {}", command),
                         }
                     },
-                    "dir" => {
+                    "dir" => { // this branch is kinda useless, but we need a separate branch because wildcard handles files
                         let name = line_split.next().unwrap().to_string();
-                        entries.push(Entry::File(File::Dir { name, id: "0".to_string(), size: 0, files: Vec::new(), parent: Some(cid.last().unwrap().to_owned()) }));
+                        entries.push(Entry::File(File::Dir { name, id: 0, size: 0, files: Vec::new(), parent: Some(cid.last().unwrap().to_owned()) }));
                     }
                     _ => {
                         let name = line_split.next().unwrap().to_string();
@@ -258,7 +269,7 @@ fn build_root(root: &mut File, filelist: Vec<File>) {
 /// Modifies the current directory's files, setting them to the aforementioned filtered vector.
 /// Also calculates size of directory according to size of children.
 /// No return; mutates the original directory.
-fn build_dir(dir: &mut File, filelist: &Vec<File>) {
+fn build_dir(dir: &mut File, filelist: &Vec<File>) { // TODO: FIX THIS! This doesn't work properly.
     let filelist_clone = filelist.clone();
     let files = filelist_clone.into_iter().filter(|file| file.parent_eq(dir.get_id().clone())).collect::<Vec<File>>();
     dir.set_files(files);
