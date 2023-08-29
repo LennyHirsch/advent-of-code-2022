@@ -8,7 +8,7 @@ const STRING_LEN: usize = 12;
 fn main() {
     let contents = fs::read_to_string("day7.txt").expect("Reading file contents");
     let (entries, mut dirlist) = parse_lines(contents);
-    let filelist = build_filelist(entries);
+    let mut filelist = build_filelist(entries);
 
     for dir in &dirlist {
         println!("{:?}", dir);
@@ -21,13 +21,15 @@ fn main() {
     let mut root = dirlist[0].clone();
     dirlist.remove(0); // remove root from dirlist
     
-    build_all_dirs(&mut dirlist, &filelist); // initial build: inserts files
-    let dirlist_clone = dirlist.clone();
-    build_all_dirs(&mut dirlist, &dirlist_clone); // second build: inserts subdirs
+    // build_all_dirs(&mut dirlist, &filelist); // initial build: inserts files
+    // let dirlist_clone = dirlist.clone();
+    // build_all_dirs(&mut dirlist, &dirlist_clone); // second build: inserts subdirs
+
+
+    (dirlist, filelist) = build_dirs(dirlist, filelist);
     for dir in &dirlist {
         println!("{:#?}", dir);
-    }
-    
+    }   
     build_root(&mut root, filelist.clone());
     build_root(&mut root, dirlist.clone());
 
@@ -263,6 +265,39 @@ fn build_root(root: &mut File, filelist: Vec<File>) {
     let size = root.get_size();
     root.set_size(size);
 }
+
+// TESTING
+
+fn insert_files(mut dir: File, filelist: Vec<File>) -> File {
+    let filelist_clone = filelist.clone();
+    let files = filelist_clone.into_iter().filter(|file| file.parent_eq(dir.get_id().clone())).collect::<Vec<File>>();
+    dir.set_files(files);
+    let size = dir.get_size();
+    dir.set_size(size);
+    dir
+}
+
+fn insert_subdirs(mut dir: File, dirlist: Vec<File>) -> File {
+    let dirlist_clone = dirlist.clone();
+    let subdirs = dirlist_clone.into_iter().filter(|subdir| subdir.parent_eq(dir.get_id().clone())).collect::<Vec<File>>();
+    dir.set_files(subdirs);
+    let size = dir.get_size();
+    dir.set_size(size);
+    dir
+}
+
+fn build_dirs(dirlist: Vec<File>, filelist: Vec<File>) -> (Vec<File>, Vec<File>) {
+    let dirlist_iter = dirlist.clone();
+    for mut dir in dirlist_iter {
+        let filelist_clone = filelist.clone();
+        let dirlist_clone = dirlist.clone();
+        dir = insert_files(dir, filelist_clone);
+        dir = insert_subdirs(dir, dirlist_clone);
+    }
+    (dirlist.to_vec(), filelist)
+}
+
+// END TESTING
 
 /// Input arguments: mutable reference to a directory, filelist of all files
 /// Checks through filelist for any files with the current directory as their parent, and adds these to a vector.
